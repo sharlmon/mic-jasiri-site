@@ -25,6 +25,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run generate
+        env:
+          # Preview on https://sharlmon.github.io/mic-jasiri-site/ (served from a sub-path, not indexed).
+          # At the domain cut-over set NUXT_APP_BASE_URL to '/' and NUXT_SITE_INDEXABLE to 'true'
+          # (or delete both lines).
+          NUXT_APP_BASE_URL: /mic-jasiri-site/
+          NUXT_SITE_INDEXABLE: 'false'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .output/public

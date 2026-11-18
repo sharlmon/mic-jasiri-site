@@ -8,7 +8,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   const run = () => {
     cleanup?.()
-    cleanup = initPage({ navigate: (to: string) => navigateTo(to) })
+    cleanup = initPage({ navigate: (to: string) => navigateTo(to), base: useRuntimeConfig().app.baseURL })
   }
 
   nuxtApp.hook('app:mounted', () => {

@@ -1,0 +1,386 @@
+// Behaviours for elements that persist across route changes (header, menu, theme).
+export function initLayout(){
+  const root=document.documentElement;
+  const nav=document.querySelector('.site-nav');
+  const themeButton=document.querySelector('[data-theme-toggle]');
+  const themeMeta=document.querySelector('meta[name="theme-color"]');
+  const menuButton=document.querySelector('[data-menu-toggle]');
+  const mobilePanel=document.querySelector('[data-mobile-panel]');
+  const mobileLinks=[...mobilePanel.querySelectorAll('a[href]')];
+  let menuOpen=false;
+
+  function applyTheme(value,persist=false){
+    const theme=value==='light'?'light':'dark';
+    root.dataset.theme=theme;
+    themeButton.setAttribute('aria-pressed',String(theme==='light'));
+    themeButton.setAttribute('aria-label',theme==='light'?'Switch to dark mode':'Switch to light mode');
+    if(themeMeta)themeMeta.content=theme==='light'?'#ece8df':'#090909';
+    if(persist)try{localStorage.setItem('micjasiri-theme',theme)}catch(error){}
+  }
+  applyTheme(root.dataset.theme);
+  themeButton.addEventListener('click',()=>applyTheme(root.dataset.theme==='light'?'dark':'light',true));
+
+  const updateNav=()=>nav.classList.toggle('compact',scrollY>72);
+  updateNav();
+  addEventListener('scroll',updateNav,{passive:true});
+
+  function setMenu(open,restore=false){
+    menuOpen=open;
+    mobilePanel.classList.toggle('open',open);
+    mobilePanel.setAttribute('aria-hidden',String(!open));
+    menuButton.setAttribute('aria-expanded',String(open));
+    menuButton.setAttribute('aria-label',open?'Close navigation menu':'Open navigation menu');
+    document.body.classList.toggle('menu-open',open);
+    const main=document.querySelector('main');const footer=document.querySelector('footer.footer');
+    if(main)main.inert=open;
+    if(footer)footer.inert=open;
+    if(open)setTimeout(()=>mobileLinks[0].focus(),40);
+    if(!open&&restore)menuButton.focus();
+  }
+  menuButton.addEventListener('click',()=>setMenu(!menuOpen,menuOpen));
+  mobileLinks.forEach(link=>link.addEventListener('click',()=>setMenu(false)));
+  document.addEventListener('keydown',event=>{
+    if(!menuOpen)return;
+    if(event.key==='Escape'){event.preventDefault();setMenu(false,true);return}
+    if(event.key!=='Tab')return;
+    const first=mobileLinks[0],last=mobileLinks.at(-1);
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+  });
+  return {closeMenu:()=>menuOpen&&setMenu(false)};
+}
+
+export function initPage({navigate}={}){
+const cleanups=[];
+const abs=p=>!p||/^(\/|https?:|data:)/.test(p)?p:'/'+p;
+const main=document.querySelector('main');
+const innerPageHero=document.querySelector('.page-hero .hero-media img,.project-hero .hero-media img');
+const homeVideo=document.querySelector('.home-hero video[poster]');
+const innerPageFallback=document.querySelector('main img');
+const pageBackdropPath=innerPageHero?.getAttribute('src')||homeVideo?.getAttribute('poster')||innerPageFallback?.getAttribute('src');
+document.querySelector('.page-glass-backdrop')?.remove();
+document.body.classList.remove('glass-page','home-glass');
+if(pageBackdropPath){
+  const backdrop=document.createElement('div');
+  backdrop.className='page-glass-backdrop';
+  backdrop.setAttribute('aria-hidden','true');
+  const source=new URL(pageBackdropPath,document.baseURI).href;
+  backdrop.style.setProperty('--page-backdrop',`url("${source}")`);
+  document.body.classList.add('glass-page');
+  if(homeVideo)document.body.classList.add('home-glass');
+  document.body.prepend(backdrop);
+}
+const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{
+  if(entry.isIntersecting){entry.target.classList.add('visible');observer.unobserve(entry.target)}
+}),{threshold:.1});
+document.querySelectorAll('.reveal').forEach(element=>observer.observe(element));
+cleanups.push(()=>observer.disconnect());
+
+const workExplorer=document.querySelector('[data-work-explorer]');
+const workFilters=[...document.querySelectorAll('[data-work-filter]')];
+const workPanels=[...document.querySelectorAll('[data-work-panel]')];
+
+function selectWorkPanel(id,moveFocus=false){
+  const activeButton=workFilters.find(button=>button.dataset.workFilter===id);
+  if(!activeButton)return;
+  workFilters.forEach(button=>{
+    const active=button===activeButton;
+    button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;
+  });
+  workPanels.forEach(panel=>{
+    const active=panel.dataset.workPanel===id;
+    panel.hidden=!active;
+    panel.classList.toggle('is-active',active);
+  });
+  const backdrop=new URL(abs(activeButton.dataset.backdrop),document.baseURI).href;
+  workExplorer?.style.setProperty('--work-backdrop',`url("${backdrop}")`);
+  if(moveFocus)activeButton.focus();
+}
+
+workFilters.forEach((button,index)=>{
+  button.addEventListener('click',()=>selectWorkPanel(button.dataset.workFilter));
+  button.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    let next=index;
+    if(event.key==='ArrowRight')next=(index+1)%workFilters.length;
+    if(event.key==='ArrowLeft')next=(index-1+workFilters.length)%workFilters.length;
+    if(event.key==='Home')next=0;
+    if(event.key==='End')next=workFilters.length-1;
+    selectWorkPanel(workFilters[next].dataset.workFilter,true);
+  });
+});
+if(workFilters.length)selectWorkPanel(workFilters.find(button=>button.getAttribute('aria-selected')==='true')?.dataset.workFilter||workFilters[0].dataset.workFilter);
+
+const portfolioGalleryProfiles={
+  events:{client:'BizBazaar Festival',service:'Events & live',preview:'Video · Photography · Live coverage',summary:'Mic-Jasiri documented the festival from inside the action, capturing performances, audience energy and the production process across a complete visual record.',deliverables:'Event video production|Festival photography|Live coverage|Highlight reels',link:'/project-bizbazaar/'},
+  conference:{client:'50 Women on Board',service:'Conference & livestreaming',preview:'Conference video · Photography',summary:'Mic-Jasiri captured speakers, participants and defining programme moments while providing an unobtrusive visual record of the Nairobi conference.',deliverables:'Conference video production|Event photography|Speaker coverage|Audience coverage',link:'/project-women-on-board/'},
+  archive:{client:'Mic-Jasiri Productions',service:'Production archive',preview:'Crew · Cameras · Production systems',summary:'A behind-the-scenes view of the people, equipment and production workflows Mic-Jasiri brings together on location and in live environments.',deliverables:'Production planning|Camera crew|Location production|Technical direction',link:'/about/',linkLabel:'Explore the production house',items:[
+    {client:'50 Women on Board',service:'Livestreaming & control',preview:'Multi-camera · Live control',summary:'A coordinated live-production workflow created to cover the conference programme reliably across cameras, sound and stream delivery.',deliverables:'Multi-camera direction|Livestream control|Programme recording|Technical production',link:'/project-women-on-board/'},
+    {client:'Shell',service:'Commercial brand campaign',preview:'Campaign video · Field production',summary:'Field production and camera direction for the Shell Club Surprises commercial campaign.',deliverables:'Commercial production|Field production|Camera crew|Campaign execution',link:'https://www.youtube.com/watch?v=9S-1DiG5oqs',linkLabel:'Watch campaign on YouTube'},
+    {},
+    {client:'Manama Spa',service:'Commercial production',preview:'Commercial · Camera setup',summary:'A working view of the camera and production setup used to shape polished campaign imagery and a concise commercial presentation.',deliverables:'Commercial production|Campaign imagery|Camera crew|Post-production',link:'/project-manama/'},
+    {client:'50 Women on Board',service:'Conference production',preview:'Conference · Camera coverage',summary:'Camera placement and production planning designed to capture speakers, audience reactions and the full conference experience.',deliverables:'Conference filming|Speaker coverage|Audience coverage|Event photography',link:'/project-women-on-board/'},
+    {client:'BizBazaar Festival',service:'Live production',preview:'Events · Live workflow',summary:'Event-production equipment and crew workflows supporting live coverage, performance photography and festival highlight content.',deliverables:'Live coverage|Event video production|Festival photography|Highlight reels',link:'/project-bizbazaar/'}
+  ]}
+};
+
+function addPortfolioPreview(target,profile){
+  const preview=document.createElement('span');preview.className='portfolio-story-preview';
+  const clientLabel=document.createElement('small');clientLabel.textContent='Client';
+  const client=document.createElement('strong');client.textContent=profile.client;
+  const workLabel=document.createElement('small');workLabel.textContent='What we did';
+  const work=document.createElement('span');work.textContent=profile.preview;
+  preview.append(clientLabel,client,workLabel,work);target.append(preview);
+}
+
+function configurePortfolioTarget(target,profile,index){
+  const image=target.querySelector('img');
+  const caption=target.querySelector('figcaption')?.textContent.trim()||target.querySelector('h3')?.textContent.trim()||'Production story';
+  target.classList.add('portfolio-story');target.dataset.portfolioOpen='';target.setAttribute('role','button');target.setAttribute('aria-haspopup','dialog');target.setAttribute('aria-label',`${caption}: open project brief`);target.tabIndex=0;
+  Object.assign(target.dataset,{title:caption,index,service:profile.service,client:profile.client,image:image?.getAttribute('src')||'',alt:image?.alt||caption,summary:profile.summary,deliverables:profile.deliverables,link:profile.link,linkLabel:profile.linkLabel||'View full case study'});
+  addPortfolioPreview(target,profile);
+  target.addEventListener('keydown',event=>{if(!['Enter',' '].includes(event.key))return;event.preventDefault();openPortfolio(target)});
+}
+
+['events','conference','archive'].forEach((key,panelIndex)=>{
+  const base=portfolioGalleryProfiles[key];
+  document.querySelectorAll(`#panel-${key} .portfolio-shot`).forEach((shot,itemIndex)=>configurePortfolioTarget(shot,{...base,...(base.items?.[itemIndex]||{})},`${panelIndex+2}.${itemIndex+1}`));
+});
+
+const commercialFeature=document.querySelector('#panel-commercial .portfolio-feature');
+if(commercialFeature)configurePortfolioTarget(commercialFeature,{client:'Manama Spa',service:'Digital commercial',preview:'Commercial · Digital strategy',summary:'Mic-Jasiri shaped a concise commercial presentation around the Manama experience, pairing production craft with digital strategy.',deliverables:'TV commercial production|Digital strategy|Campaign imagery|Post-production',link:'/project-manama/'},'04');
+
+const portfolioModal=document.querySelector('[data-portfolio-modal]');
+const portfolioOpeners=[...document.querySelectorAll('[data-portfolio-open]')];
+const portfolioClosers=[...document.querySelectorAll('[data-portfolio-close]')];
+let portfolioTrigger=null;
+
+function closePortfolio(){
+  if(!portfolioModal?.open)return;
+  portfolioModal.close();
+}
+
+function openPortfolio(card){
+  if(!portfolioModal)return;
+  portfolioTrigger=card;
+  const set=(selector,value)=>{const target=portfolioModal.querySelector(selector);if(target)target.textContent=value};
+  const image=portfolioModal.querySelector('[data-portfolio-image]');
+  const link=portfolioModal.querySelector('[data-portfolio-link]');
+  set('[data-portfolio-index]',card.dataset.index);
+  set('[data-portfolio-service]',card.dataset.service);
+  set('[data-portfolio-title]',card.dataset.title);
+  set('[data-portfolio-client]',card.dataset.client);
+  set('[data-portfolio-summary]',card.dataset.summary);
+  const deliverables=portfolioModal.querySelector('[data-portfolio-deliverables]');
+  if(deliverables){deliverables.replaceChildren(...card.dataset.deliverables.split('|').map(item=>{const tag=document.createElement('span');tag.textContent=item;return tag}))}
+  if(image){image.src=abs(card.dataset.image);image.alt=card.dataset.alt}
+  if(link){link.href=card.dataset.link;link.textContent=card.dataset.linkLabel||'View full case study'}
+  portfolioModal.showModal();
+  document.body.classList.add('portfolio-modal-open');
+}
+
+portfolioOpeners.forEach(card=>card.addEventListener('click',()=>openPortfolio(card)));
+portfolioClosers.forEach(button=>button.addEventListener('click',closePortfolio));
+portfolioModal?.addEventListener('click',event=>{if(event.target===portfolioModal)closePortfolio()});
+portfolioModal?.querySelector('[data-portfolio-link]')?.addEventListener('click',event=>{const href=event.currentTarget.getAttribute('href');if(href&&href.startsWith('/')){event.preventDefault();portfolioModal.close();navigate(href)}});
+portfolioModal?.addEventListener('close',()=>{document.body.classList.remove('portfolio-modal-open');portfolioTrigger?.focus()});
+
+const serviceData={
+  commercial:{number:'01',title:'Digital Marketing & Strategy',image:'assets/services/digital-marketing.jpg',alt:'Gimbal-mounted camera with monitor filming a restaurant shoot',summary:'Campaign-ready film and digital content with one production partner from concept through delivery.',lead:'Build attention around the brand.',description:'We translate a commercial objective into a clear visual idea, then manage pre-production, filming, editing and platform versions. The result is a coherent campaign library that works across broadcast, web and social channels.',offerings:['Creative development','Brand films','Digital commercials','Social cut-downs','Post-production'],collections:[{title:'Campaign production',description:'A connected set of hero films, short edits and visual assets designed around the audience and channel.',images:[['assets/services/digital-marketing.jpg','Gimbal-mounted camera with monitor filming a restaurant shoot'],['manama.jpg','Manama Spa campaign still'],['assets/clients/manama-spa.jpeg','Manama Spa brand identity']]}]},
+  events:{number:'02',title:'Events & Live',image:'live.jpg',alt:'Live event production in progress',summary:'Multi-camera production that carries the energy of the room to audiences on site and online.',lead:'Cover every important moment.',description:'From conferences and concerts to panel conversations, we plan camera positions, sound, streaming and rapid-turnaround edits as one production system. Our crews work discreetly while keeping the story, speakers and audience experience clear.',offerings:['Multi-camera coverage','Livestreaming','Event photography','Speaker interviews','Highlight films'],collections:[{title:'Live coverage',description:'Reliable event production supported by considered framing, clean sound and story-led highlights.',images:[['live.jpg','Live event production'],['assets/work/2N0A0928.jpg','BizBazaar Festival performers'],['assets/work/conference-audience.jpg','Conference audience'],['50.jpg','Panel discussion photography']]}]},
+  film:{number:'03',title:'Interview & Documentary',image:'service2.jpeg',alt:'Camera filming an interview subject',summary:'Human stories shaped through research, thoughtful interviews and cinematic production.',lead:'Give real stories room to breathe.',description:'We develop documentary and interview projects from the first research conversation through the final edit. Each production is built around a strong editorial point of view, comfortable contributors and visuals that support what is being said.',offerings:['Documentaries','Corporate interviews','Story development','Location production','Editing & grading'],collections:[{title:'Story-led production',description:'Interview environments and documentary coverage designed to feel composed, credible and human.',images:[['service2.jpeg','Camera filming an interview subject'],['REMY4390.jpg','Mic-Jasiri camera crew on location'],['assets/work/shell-field-production.jpg','Field production crew']]}]},
+  studio:{number:'04',title:'Studio & Strategy',image:'show.jpg',alt:'Studio camera recording a talk show',summary:'Repeatable studio formats backed by audiovisual planning, format development and production systems.',lead:'Turn an idea into a format.',description:'We help teams define what a series, podcast or talk-show format needs to do before the cameras roll. Then we bring together the studio, crew, run of show, graphics and post-production workflow needed to deliver consistently.',offerings:['Talk shows','Video podcasts','Format development','Audiovisual strategy','Studio production'],collections:[{title:'Formats & systems',description:'Production environments built for clear conversations, repeatable episodes and efficient delivery.',images:[['show.jpg','Talk show production'],['assets/work/live-streaming-control.jpg','Live production control'],['commercial.jpg','Studio camera production']]}]},
+  photography:{number:'05',title:'Photography',image:'assets/services/photography/BRM1559.jpg',alt:'Corporate group portrait photographed by Mic-Jasiri',summary:'Focused photographic collections for organizations, hospitality brands and food businesses.',lead:'Still images with a clear purpose.',description:'We plan each photography assignment around where the images will live and what they need to communicate. The service is organized into three focused collections so the lighting, styling, shot list and pace match the subject.',offerings:['Corporate photography','Food photography','Hospitality & wellness','Art direction','Retouching'],collections:[
+    {title:'Corporate Photography',description:'Leadership portraits, team photographs and partnership moments that feel polished, credible and natural.',images:[['assets/services/photography/BRM1559.jpg','Corporate team portrait at Avenue Healthcare'],['assets/services/photography/BRM1567.jpg','Corporate portrait of two executives'],['assets/services/photography/BRM1579.jpg','Executives marking a partnership with a handshake']]},
+    {title:'Hospitality Photography',description:'Menu and campaign imagery styled to preserve texture, colour and appetite across digital and print use.',images:[['assets/services/photography/hospitality-4701.jpg','Chef flambéing a pan in the Arabica Coffee House kitchen'],['assets/services/photography/hospitality-4702.jpg','Chef plating a dish in the Arabica kitchen'],['assets/services/photography/hospitality-4704.jpg','Savoury pastries served on a tray at Arabica'],['assets/services/photography/hospitality-4705.jpg','Wrap with micro greens and dipping sauce at Arabica'],['assets/services/photography/hospitality-4707.jpg','Wraps on branded Arabica paper with chilli sauce'],['assets/services/photography/hospitality-4709.jpg','Server carrying plates through the restaurant'],['assets/services/photography/hospitality-4710.jpg','Grilled meat with fries and vegetables on a table setting'],['assets/services/photography/hospitality-4714.jpg','Guest enjoying a meal in a red booth'],['assets/services/photography/hospitality-4715.jpg','Child eating pasta in a restaurant booth'],['assets/services/photography/hospitality-4716.jpg','Young guest smiling over a sandwich and coffee'],['assets/services/photography/hospitality-4718.jpg','Green cocktail on the Arabica bar'],['assets/services/photography/hospitality-4719.jpg','Server carrying a green cocktail on a tray'],['assets/services/photography/hospitality-4720.jpg','Child sipping a green drink'],['assets/services/photography/hospitality-4722.jpg','Child smiling with a green drink'],['assets/services/photography/hospitality-4726.jpg','Pastry counter and display at Arabica'],['assets/services/photography/hospitality-4727.jpg','Arabica dining room with red booths and wooden tables'],['assets/services/photography/hospitality-4728.jpg','Family walking toward the Arabica Coffee House entrance']]},
+    {title:'Hospitality & Wellness Photography',description:'Atmospheric imagery for spas and hospitality brands, covering interiors, treatments, amenities and the complete guest experience.',images:[['assets/services/photography/BRM_8115.jpg','Guest arriving at the Manama Spa reception'],['assets/services/photography/BRM_8180.jpg','Prepared treatment room at Manama Spa'],['assets/services/photography/BRM_8203.jpg','Branded Manama Spa towels and floral details'],['assets/services/photography/BRM_8256.jpg','Manama hospitality lounge and coffee house interior'],['assets/services/photography/BRM_8308.jpg','Colourful wellness treatment area at Manama Spa'],['assets/services/photography/BRM_8462.jpg','Manama Spa sauna prepared for a guest'],['assets/services/photography/BRM_8587.jpg','Manama Spa hospitality lounge interior'],['assets/services/photography/BRM_8726.jpg','Manama Spa guest in a robe beside the treatment basins'],['assets/services/photography/BRM_8815.jpg','Massage treatment photographed at Manama Spa']]}
+  ]}
+};
+
+const serviceModal=document.querySelector('[data-service-modal]');
+const serviceOpeners=[...document.querySelectorAll('[data-service-open]')];
+const serviceClosers=[...document.querySelectorAll('[data-service-close]')];
+const serviceLightbox=document.querySelector('[data-service-lightbox]');
+const serviceLightboxImage=serviceLightbox?.querySelector('[data-service-lightbox-image]');
+const serviceLightboxCaption=serviceLightbox?.querySelector('[data-service-lightbox-caption]');
+let serviceTrigger=null;
+let serviceLightboxTrigger=null;
+
+function closeServiceLightbox(){
+  if(!serviceLightbox||serviceLightbox.hidden)return;
+  serviceLightbox.hidden=true;serviceModal?.classList.remove('lightbox-open');serviceLightboxTrigger?.focus();serviceLightboxTrigger=null;
+}
+function openServiceLightbox(item,image){
+  if(!serviceLightbox||!serviceLightboxImage||!serviceLightboxCaption)return;
+  serviceLightboxTrigger=item;serviceLightboxImage.src=image.currentSrc||image.src||image.dataset.src;serviceLightboxImage.alt=image.alt;serviceLightboxCaption.textContent=image.alt;
+  serviceLightbox.hidden=false;serviceModal?.classList.add('lightbox-open');serviceLightbox.querySelector('[data-service-lightbox-close]')?.focus();
+}
+function closeService(){closeServiceLightbox();if(serviceModal?.open)serviceModal.close()}
+
+let serviceImageObserver=null;
+function loadServiceImage(image){
+  if(!image.dataset.src)return;
+  image.src=image.dataset.src;delete image.dataset.src;
+}
+
+function buildServiceCollections(collections){
+  const host=serviceModal?.querySelector('[data-service-collections]');
+  if(!host)return;
+  serviceImageObserver?.disconnect();
+  host.replaceChildren(...collections.map((collection,index)=>{
+    const block=document.createElement('section');block.className='service-detail-block';
+    const head=document.createElement('div');head.className='service-detail-head';
+    const number=document.createElement('span');number.className='service-detail-index';number.textContent=String(index+1).padStart(2,'0');
+    const title=document.createElement('h3');title.textContent=collection.title;
+    const description=document.createElement('p');description.textContent=collection.description;
+    const gallery=document.createElement('div');gallery.className='service-detail-gallery';
+    gallery.replaceChildren(...collection.images.map(([src,alt])=>{const figure=document.createElement('figure');figure.className='service-gallery-item';figure.setAttribute('role','button');figure.setAttribute('aria-label',`Expand ${alt}`);figure.tabIndex=0;const image=document.createElement('img');image.dataset.src=abs(src);image.alt=alt;image.loading='lazy';image.decoding='async';image.fetchPriority='low';figure.append(image);figure.addEventListener('click',()=>openServiceLightbox(figure,image));figure.addEventListener('keydown',event=>{if(!['Enter',' '].includes(event.key))return;event.preventDefault();openServiceLightbox(figure,image)});return figure}));
+    head.append(number,title,description);block.append(head,gallery);return block;
+  }));
+  const pending=[...host.querySelectorAll('img[data-src]')];
+  const root=serviceModal.querySelector('.service-modal-shell');
+  if('IntersectionObserver' in window&&root){
+    serviceImageObserver=new IntersectionObserver(entries=>entries.forEach(entry=>{if(!entry.isIntersecting)return;loadServiceImage(entry.target);serviceImageObserver.unobserve(entry.target)}),{root,rootMargin:'320px 0px'});
+    pending.forEach(image=>serviceImageObserver.observe(image));
+  }else pending.forEach(loadServiceImage);
+}
+
+function openService(button){
+  const service=serviceData[button.dataset.serviceOpen];
+  if(!serviceModal||!service)return;
+  serviceTrigger=button;
+  const set=(selector,value)=>{const target=serviceModal.querySelector(selector);if(target)target.textContent=value};
+  set('[data-service-number]',service.number);set('[data-service-title]',service.title);set('[data-service-summary]',service.summary);set('[data-service-lead]',service.lead);set('[data-service-description]',service.description);
+  const image=serviceModal.querySelector('[data-service-image]');if(image){image.src=abs(service.image);image.alt=service.alt;image.decoding='async';image.fetchPriority='high'}
+  const offerings=serviceModal.querySelector('[data-service-offerings]');if(offerings)offerings.replaceChildren(...service.offerings.map(item=>{const tag=document.createElement('span');tag.textContent=item;return tag}));
+  buildServiceCollections(service.collections);
+  serviceModal.showModal();serviceModal.querySelector('.service-modal-shell')?.scrollTo(0,0);document.body.classList.add('service-modal-open');
+}
+
+serviceOpeners.forEach(button=>button.addEventListener('click',()=>openService(button)));
+serviceClosers.forEach(button=>button.addEventListener('click',closeService));
+serviceModal?.addEventListener('click',event=>{if(event.target===serviceModal)closeService()});
+serviceLightbox?.querySelectorAll('[data-service-lightbox-close]').forEach(button=>button.addEventListener('click',closeServiceLightbox));
+serviceLightbox?.addEventListener('click',event=>{if(event.target===serviceLightbox)closeServiceLightbox()});
+const onLightboxKey=event=>{if(event.key==='Escape'&&!serviceLightbox?.hidden){event.preventDefault();closeServiceLightbox()}};
+document.addEventListener('keydown',onLightboxKey);
+cleanups.push(()=>document.removeEventListener('keydown',onLightboxKey));
+serviceModal?.addEventListener('cancel',event=>{if(serviceLightbox?.hidden)return;event.preventDefault();closeServiceLightbox()});
+serviceModal?.addEventListener('close',()=>{closeServiceLightbox();document.body.classList.remove('service-modal-open');serviceTrigger?.focus()});
+
+const atmosphere=document.querySelector('.image-atmosphere');
+const atmosphereImages={services:'/assets/work/shell-field-production.jpg',clients:'/assets/work/conference-audience.jpg'};
+const atmosphereImage=atmosphereImages[location.pathname.replace(/\/$/,'').split('/').pop()];
+if(atmosphere&&atmosphereImage){
+  const backdrop=new URL(atmosphereImage,document.baseURI).href;
+  atmosphere.style.setProperty('--section-backdrop',`url("${backdrop}")`);
+}
+
+const form=document.querySelector('#contactForm');
+if(form)form.addEventListener('submit',event=>{
+  event.preventDefault();
+  if(!form.reportValidity())return;
+  const data=new FormData(form);
+  const value=name=>(data.get(name)||'').toString().trim();
+  const message=[
+    'Hi Mic-Jasiri Productions,',
+    'I’d like to book a shoot.',
+    '',
+    `Name: ${value('name')}`,
+    `Email: ${value('email')}`,
+    `Phone: ${value('phone')||'Not provided'}`,
+    `Service: ${value('service')||'Not selected'}`,
+    '',
+    'Project brief:',
+    value('message')
+  ].join('\n');
+  location.href=`https://wa.me/254721561704?text=${encodeURIComponent(message)}`;
+});
+
+const video=document.querySelector('video');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+if(video&&reduced.matches)video.pause();
+const onMotion=event=>{if(!video)return;event.matches?video.pause():video.play().catch(()=>{})};
+reduced.addEventListener?.('change',onMotion);
+cleanups.push(()=>reduced.removeEventListener?.('change',onMotion));
+
+// Video modal player for Key Achievement Projects
+const videoModal=document.querySelector('[data-video-modal]');
+if(videoModal){
+  const iframe=videoModal.querySelector('#videoModalIframe');
+  const titleEl=videoModal.querySelector('#videoModalTitle');
+  const roleEl=videoModal.querySelector('#videoModalRole');
+  const externalEl=videoModal.querySelector('#videoModalExternal');
+  const closeBtn=videoModal.querySelector('[data-video-close]');
+  let lastTrigger=null;
+
+  function openVideoModal(videoId,title,role,externalUrl,trigger){
+    lastTrigger=trigger;
+    if(titleEl)titleEl.textContent=title||'';
+    if(roleEl)roleEl.textContent=role||'';
+    if(externalEl){
+      if(externalUrl){
+        externalEl.href=externalUrl;
+        externalEl.style.display='inline-flex';
+      }else{
+        externalEl.style.display='none';
+      }
+    }
+    if(iframe){
+      iframe.src=`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
+    }
+    if(typeof videoModal.showModal==='function'){
+      videoModal.showModal();
+    }else{
+      videoModal.setAttribute('open','');
+    }
+    document.body.classList.add('video-modal-open');
+  }
+
+  function closeVideoModal(){
+    if(iframe)iframe.src='';
+    if(typeof videoModal.close==='function'){
+      videoModal.close();
+    }else{
+      videoModal.removeAttribute('open');
+    }
+    document.body.classList.remove('video-modal-open');
+    if(lastTrigger&&typeof lastTrigger.focus==='function'){
+      lastTrigger.focus();
+    }
+  }
+
+  closeBtn?.addEventListener('click',closeVideoModal);
+  videoModal.addEventListener('close',closeVideoModal);
+
+  videoModal.addEventListener('click',event=>{
+    if(event.target===videoModal)closeVideoModal();
+  });
+
+  document.querySelectorAll('[data-video-id]').forEach(btn=>{
+    btn.addEventListener('click',event=>{
+      event.preventDefault();
+      const videoId=btn.getAttribute('data-video-id');
+      const title=btn.getAttribute('data-video-title');
+      const role=btn.getAttribute('data-video-role');
+      const url=btn.getAttribute('data-video-url');
+      if(videoId){
+        openVideoModal(videoId,title,role,url,btn);
+      }
+    });
+    // Support enter / space key on div triggers with role=button
+    if(btn.tagName==='DIV'&&btn.getAttribute('role')==='button'){
+      btn.addEventListener('keydown',event=>{
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();
+          btn.click();
+        }
+      });
+    }
+  });
+}
+
+return ()=>{cleanups.forEach(fn=>fn());document.body.classList.remove('portfolio-modal-open','service-modal-open','video-modal-open')};
+}

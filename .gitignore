@@ -1,0 +1,45 @@
+# Backup archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.sql
+backups/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.htpasswd
+
+# Logs and server-generated files
+*.log
+error_log
+
+# macOS and archive metadata
+.DS_Store
+._*
+__MACOSX/
+
+# Editor files
+.vscode/
+.idea/
+
+# Not part of the published site
+docs/
+visual-review/
+.htaccess
+.well-known/
+# Unreferenced images
+ali.jpg
+con7.jpg
+corporate.jpg
+digital.jpg
+documentaries.jpg
+services1.jpeg
+strategy.jpg
+logo-light.png

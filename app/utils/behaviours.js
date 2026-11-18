@@ -50,9 +50,15 @@ export function initLayout(){
   return {closeMenu:()=>menuOpen&&setMenu(false)};
 }
 
-export function initPage({navigate}={}){
+export function initPage({navigate,base='/'}={}){
 const cleanups=[];
-const abs=p=>!p||/^(\/|https?:|data:)/.test(p)?p:'/'+p;
+const B=base.replace(/\/$/,'');
+// Root-relative path -> includes the app base (idempotent), so it also works from a sub-path.
+const abs=p=>{
+  if(!p||/^(https?:|data:|\/\/)/.test(p))return p;
+  const path=p.startsWith('/')?p:'/'+p;
+  return B&&!path.startsWith(B+'/')?B+path:path;
+};
 const main=document.querySelector('main');
 const innerPageHero=document.querySelector('.page-hero .hero-media img,.project-hero .hero-media img');
 const homeVideo=document.querySelector('.home-hero video[poster]');
@@ -176,7 +182,7 @@ function openPortfolio(card){
   const deliverables=portfolioModal.querySelector('[data-portfolio-deliverables]');
   if(deliverables){deliverables.replaceChildren(...card.dataset.deliverables.split('|').map(item=>{const tag=document.createElement('span');tag.textContent=item;return tag}))}
   if(image){image.src=abs(card.dataset.image);image.alt=card.dataset.alt}
-  if(link){link.href=card.dataset.link;link.textContent=card.dataset.linkLabel||'View full case study'}
+  if(link){link.href=abs(card.dataset.link);link.textContent=card.dataset.linkLabel||'View full case study'}
   portfolioModal.showModal();
   document.body.classList.add('portfolio-modal-open');
 }
@@ -184,7 +190,7 @@ function openPortfolio(card){
 portfolioOpeners.forEach(card=>card.addEventListener('click',()=>openPortfolio(card)));
 portfolioClosers.forEach(button=>button.addEventListener('click',closePortfolio));
 portfolioModal?.addEventListener('click',event=>{if(event.target===portfolioModal)closePortfolio()});
-portfolioModal?.querySelector('[data-portfolio-link]')?.addEventListener('click',event=>{const href=event.currentTarget.getAttribute('href');if(href&&href.startsWith('/')){event.preventDefault();portfolioModal.close();navigate(href)}});
+portfolioModal?.querySelector('[data-portfolio-link]')?.addEventListener('click',event=>{const href=event.currentTarget.getAttribute('href');if(href&&href.startsWith(B+'/')){event.preventDefault();portfolioModal.close();navigate(href.slice(B.length))}});
 portfolioModal?.addEventListener('close',()=>{document.body.classList.remove('portfolio-modal-open');portfolioTrigger?.focus()});
 
 const serviceData={
@@ -271,7 +277,7 @@ serviceModal?.addEventListener('cancel',event=>{if(serviceLightbox?.hidden)retur
 serviceModal?.addEventListener('close',()=>{closeServiceLightbox();document.body.classList.remove('service-modal-open');serviceTrigger?.focus()});
 
 const atmosphere=document.querySelector('.image-atmosphere');
-const atmosphereImages={services:'/assets/work/shell-field-production.jpg',clients:'/assets/work/conference-audience.jpg'};
+const atmosphereImages={services:abs('/assets/work/shell-field-production.jpg'),clients:abs('/assets/work/conference-audience.jpg')};
 const atmosphereImage=atmosphereImages[location.pathname.replace(/\/$/,'').split('/').pop()];
 if(atmosphere&&atmosphereImage){
   const backdrop=new URL(atmosphereImage,document.baseURI).href;

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { achievements } from '~/data/achievements'
 
+const base = useRuntimeConfig().app.baseURL.replace(/\/$/, '')
+// Dynamic bindings are not rewritten by the build-time base-URL pass, so prefix them here.
+const asset = (path: string) => `${base}${path}`
 const youtube = (id: string) => `https://www.youtube.com/watch?v=${id}`
 </script>
 
@@ -20,7 +23,7 @@ const youtube = (id: string) => `https://www.youtube.com/watch?v=${id}`
           'data-video-url': youtube(item.videoId),
         } : {}"
       >
-        <img :src="item.image" :alt="item.imageAlt" :class="item.focus ? `focus-${item.focus}` : undefined" width="1080" height="1080" loading="lazy" decoding="async">
+        <img :src="asset(item.image)" :alt="item.imageAlt" :class="item.focus ? `focus-${item.focus}` : undefined" width="1080" height="1080" loading="lazy" decoding="async">
         <span v-if="item.badge" class="achievement-badge">{{ item.badge }}</span>
         <span v-if="item.videoId" class="media-play-btn" aria-hidden="true">▶</span>
       </div>

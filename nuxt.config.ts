@@ -27,9 +27,12 @@ export default defineNuxtConfig({
     description: 'Mic-Jasiri Productions is a Nairobi film, television, commercial and live production company.',
     defaultLocale: 'en',
     trailingSlash: true,
+    // false for the sub-path preview build so it is not indexed next to the real domain
+    indexable: process.env.NUXT_SITE_INDEXABLE !== 'false',
   },
 
   app: {
+    baseURL: process.env.NUXT_APP_BASE_URL || '/',
     head: {
       htmlAttrs: { lang: 'en', 'data-theme': 'dark' },
       meta: [
